@@ -59,7 +59,7 @@ for i in range(N - d_E + 1):
     embedding[i] = [data[j] for j in range(i, i+d_E)]
 
 def edge_weight(d, dot):
-    return d - dot
+    return d - 0.25 * dot
 
 def nearest_neighbor(embedding, i, xz=None):
     valid_angle = np.ones(len(embedding))
@@ -67,17 +67,24 @@ def nearest_neighbor(embedding, i, xz=None):
         for j, z in enumerate(embedding):
             jvec = embedding[j] - embedding[i]
             angle = np.arccos(np.dot(jvec, xz) / (np.linalg.norm(jvec) * np.linalg.norm(xz)))
-            if angle < np.pi / 9.0:
-                valid_angle[j] = True
+            valid_angle[j] = angle < np.pi / 3.0
+            # print(angle)
+            # print(valid_angle[j])
             
     min_d = float('inf')
+    min_dot = 0.0
     min_j = None
+
     for j, z in enumerate(embedding):
         if i == j or not valid_angle[j]:
             continue
         d = np.linalg.norm(z - embedding[i])
-        if d < min_d:
+        dot = 0.0
+        if xz is not None:
+            dot = np.dot(embedding[j] - embedding[i], xz)
+        if edge_weight(d, dot) < edge_weight(min_d, min_dot):
             min_d = d
+            min_dot = dot
             min_j = j
     return min_j, min_d
 
@@ -98,33 +105,22 @@ x = embedding[i]
 j, d = nearest_neighbor(embedding, i)
 L.append(d)
 
-while d < epsilon:
+bar = Bar('Processing', max=len(embedding))
+while max(i, j) + 1 < len(embedding):
     i += 1
     j += 1
-    d =  np.linalg.norm(embedding[i] - embedding[j])
-Lprime.append(d)
-
-bar = Bar('Processing', max=len(embedding))
-
-while max(i, j) < len(embedding):
-    x = embedding[i]
-    j, d = nearest_neighbor(embedding, i, embedding[j]-x)
-    L.append(d)
-
-    # print("hello")
-    while d < epsilon and max(i, j) + 1 < len(embedding):
-        # print("world")
-        i += 1
-        j += 1
-        d =  np.linalg.norm(embedding[i] - embedding[j])
+    d = np.linalg.norm(embedding[i] - embedding[j])
     Lprime.append(d)
+
+    j, d =  nearest_neighbor(embedding, i, embedding[j] - embedding[i])
+    L.append(d)
 
     bar.next()
 
 bar.finish()
 
 lambda_calc = 0.0
-for i in range(len(L)):
+for i in range(len(L) - 1):
     lambda_calc += np.log2(Lprime[i] / L[i])
 lambda_calc /= times[-1] - times[0]
 
