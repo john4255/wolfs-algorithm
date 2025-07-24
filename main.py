@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from progress.bar import Bar
 
 import random
 
@@ -31,33 +32,11 @@ def validate(data, r):
 
     return my_lambda
 
-def nearest_neighbor(embedding, z1, z2=None):
-    min_d = float('inf')
-    min_angle = float('inf')
-    min_z = embedding[0]
-    for z in embedding:
-        d = np.linalg.norm(z - z1)
-        if z2 is not None: # Preserve angle as much as possible
-            angle = np.arccos(np.dot(z - z2, z1 - z2) / (np.linalg.norm(z - z1) * np.linalg.norm(z - z2)))
-        else:
-            angle = 0.0
-        if d < 0.001:
-            continue
-        if z2 is not None and np.linalg.norm(z - z2) < 0.001:
-            continue
-        if d + 1.9 * angle < min_d + 1.9 * min_angle:
-            min_d = d
-            min_angle = angle
-            min_z = z
-    return min_z, min_d
-
-def evolve(x, r):
-    return x + logistic_growth(x, r)
-
+### Run Benchmark ###
 r_space = np.linspace(0.0, 4.0, 100)
 lyapunov_exp = []
 for r in r_space:
-    times = np.linspace(0.0, 25.0, N_TIMES)
+    times = np.linspace(0.0, 10.0, N_TIMES)
     data = gen_data_points(0.6, r, times)
     lambda_validate = validate(data, r)
     lyapunov_exp.append(lambda_validate)
@@ -65,13 +44,12 @@ for r in r_space:
 plt.plot(r_space, lyapunov_exp)
 plt.show()
 
+### Perform Wolf's Algorithm ###
 le_4 = lyapunov_exp[-1]
 print(f"LE @ 4.0 = {le_4}")
 
-# r = 4.0
-times = np.linspace(0.0, 25.0, N_TIMES)
+times = np.linspace(0.0, 10.0, N_TIMES)
 data = gen_data_points(0.6, r, times)
-# data = gen_noisy_data(data)
 
 N = len(data)
 d_E = 25
@@ -80,21 +58,70 @@ embedding = np.zeros([N - d_E + 1, d_E])
 for i in range(N - d_E + 1):
     embedding[i] = [data[j] for j in range(i, i+d_E)]
 
+def edge_weight(d, dot):
+    return d - dot
+
+def nearest_neighbor(embedding, i, xz=None):
+    valid_angle = np.ones(len(embedding))
+    if xz is not None:
+        for j, z in enumerate(embedding):
+            jvec = embedding[j] - embedding[i]
+            angle = np.arccos(np.dot(jvec, xz) / (np.linalg.norm(jvec) * np.linalg.norm(xz)))
+            if angle < np.pi / 9.0:
+                valid_angle[j] = True
+            
+    min_d = float('inf')
+    min_j = None
+    for j, z in enumerate(embedding):
+        if i == j or not valid_angle[j]:
+            continue
+        d = np.linalg.norm(z - embedding[i])
+        if d < min_d:
+            min_d = d
+            min_j = j
+    return min_j, min_d
+
 L = []
 Lprime = []
 
-x = embedding[0]
-z, d = nearest_neighbor(embedding, x)
-for i, x in enumerate(embedding):
-    if i % 10 == 0:
-        print(f"{i}/{N-d_E+1}")
+dist = []
+for i in range(len(embedding)):
+    for j in range(i+1,len(embedding)):
+        dist.append(np.linalg.norm(embedding[i] - embedding[j]))
+epsilon = np.percentile(dist, 10)
+epsilon = 2.5 * np.min(dist)
 
+i = 0
+j = 0
+
+x = embedding[i]
+j, d = nearest_neighbor(embedding, i)
+L.append(d)
+
+while d < epsilon:
+    i += 1
+    j += 1
+    d =  np.linalg.norm(embedding[i] - embedding[j])
+Lprime.append(d)
+
+bar = Bar('Processing', max=len(embedding))
+
+while max(i, j) < len(embedding):
+    x = embedding[i]
+    j, d = nearest_neighbor(embedding, i, embedding[j]-x)
     L.append(d)
 
-    x = evolve(x, r)
-    z = evolve(z, r)
-    z, d = nearest_neighbor(embedding, z, x)
-    Lprime.append(np.linalg.norm(x - z))
+    # print("hello")
+    while d < epsilon and max(i, j) + 1 < len(embedding):
+        # print("world")
+        i += 1
+        j += 1
+        d =  np.linalg.norm(embedding[i] - embedding[j])
+    Lprime.append(d)
+
+    bar.next()
+
+bar.finish()
 
 lambda_calc = 0.0
 for i in range(len(L)):
