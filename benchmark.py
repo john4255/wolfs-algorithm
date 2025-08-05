@@ -16,6 +16,6 @@ print(f"LE @ 3.59 = {le_359}")
 le_363 = lyapunov_exp[90]
 print(f"LE @ 3.63 = {le_363}")
 le_379 = lyapunov_exp[94]
-print(f"LE @ 4.00 = {le_379}")
+print(f"LE @ 4.79 = {le_379}")
 le_4 = lyapunov_exp[99]
 print(f"LE @ 4.00 = {le_4}")
